@@ -6,6 +6,7 @@ from typing import Any, Dict
 import httpx
 from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 import paper_trade
@@ -26,6 +27,11 @@ app.add_middleware(
 )
 
 app.include_router(auth_router)
+
+
+@app.exception_handler(httpx.HTTPStatusError)
+async def upstox_error_handler(request, exc: httpx.HTTPStatusError):
+    return JSONResponse(status_code=exc.response.status_code, content={"detail": exc.response.text})
 
 
 def _date_str(dt: datetime) -> str:

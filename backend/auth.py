@@ -3,7 +3,7 @@ import os
 import httpx
 from dotenv import load_dotenv
 from fastapi import APIRouter, HTTPException
-from fastapi.responses import RedirectResponse
+from fastapi.responses import HTMLResponse
 
 load_dotenv()
 
@@ -55,7 +55,16 @@ async def callback(code: str):
     token_data = response.json()
     access_token_store["access_token"] = token_data.get("access_token")
 
-    return {"status": "success", "token_data": token_data}
+    html = """
+    <html>
+      <body style="font-family: sans-serif; text-align: center; padding-top: 50px;">
+        <h2>Upstox connected successfully</h2>
+        <p>This window will close automatically.</p>
+        <script>window.close();</script>
+      </body>
+    </html>
+    """
+    return HTMLResponse(content=html)
 
 
 @router.get("/token-status")

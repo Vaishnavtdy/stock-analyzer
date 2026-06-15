@@ -7,16 +7,16 @@ function Header({ selectedSymbol, onSelectInstrument }) {
   const [authenticated, setAuthenticated] = useState(false);
   const [marketStatus, setMarketStatus] = useState(null);
 
-  useEffect(() => {
-    const checkAuth = async () => {
-      try {
-        const res = await api.get("/token-status");
-        setAuthenticated(res.data.authenticated);
-      } catch {
-        setAuthenticated(false);
-      }
-    };
+  const checkAuth = async () => {
+    try {
+      const res = await api.get("/token-status");
+      setAuthenticated(res.data.authenticated);
+    } catch {
+      setAuthenticated(false);
+    }
+  };
 
+  useEffect(() => {
     const checkMarket = async () => {
       try {
         const res = await api.get("/api/market-status");
@@ -59,7 +59,15 @@ function Header({ selectedSymbol, onSelectInstrument }) {
   const connectUpstox = async () => {
     try {
       const res = await api.get("/login");
-      window.open(res.data.auth_url, "_blank");
+      const popup = window.open(res.data.auth_url, "_blank", "width=500,height=700");
+      if (!popup) return;
+
+      const interval = setInterval(() => {
+        if (popup.closed) {
+          clearInterval(interval);
+          checkAuth();
+        }
+      }, 1000);
     } catch {
       // ignore
     }
