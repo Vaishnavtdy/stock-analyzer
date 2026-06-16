@@ -69,6 +69,121 @@ class AIAnalystRequest(BaseModel):
     analysis: Dict[str, Any]
 
 
+class MarketScanRequest(BaseModel):
+    instruments: list = None
+    max_results: int = 5
+
+
+# Default Nifty 50 watchlist (instrument_key uses NSE_EQ|ISIN format)
+NIFTY50_WATCHLIST = [
+    {"instrument_key": "NSE_EQ|INE002A01018", "symbol": "RELIANCE"},
+    {"instrument_key": "NSE_EQ|INE467B01029", "symbol": "TCS"},
+    {"instrument_key": "NSE_EQ|INE040A01034", "symbol": "HDFCBANK"},
+    {"instrument_key": "NSE_EQ|INE009A01021", "symbol": "INFY"},
+    {"instrument_key": "NSE_EQ|INE090A01021", "symbol": "ICICIBANK"},
+    {"instrument_key": "NSE_EQ|INE397D01024", "symbol": "BHARTIARTL"},
+    {"instrument_key": "NSE_EQ|INE062A01020", "symbol": "SBIN"},
+    {"instrument_key": "NSE_EQ|INE296A01024", "symbol": "BAJFINANCE"},
+    {"instrument_key": "NSE_EQ|INE075A01022", "symbol": "WIPRO"},
+    {"instrument_key": "NSE_EQ|INE021A01026", "symbol": "ASIANPAINT"},
+    {"instrument_key": "NSE_EQ|INE860A01027", "symbol": "HCLTECH"},
+    {"instrument_key": "NSE_EQ|INE101A01026", "symbol": "M&M"},
+    {"instrument_key": "NSE_EQ|INE585B01010", "symbol": "MARUTI"},
+    {"instrument_key": "NSE_EQ|INE280A01028", "symbol": "TITAN"},
+    {"instrument_key": "NSE_EQ|INE044A01036", "symbol": "SUNPHARMA"},
+    {"instrument_key": "NSE_EQ|INE237A01028", "symbol": "KOTAKBANK"},
+    {"instrument_key": "NSE_EQ|INE238A01034", "symbol": "AXISBANK"},
+    {"instrument_key": "NSE_EQ|INE669C01036", "symbol": "TECHM"},
+    {"instrument_key": "NSE_EQ|INE018A01030", "symbol": "LT"},
+    {"instrument_key": "NSE_EQ|INE038A01020", "symbol": "HINDALCO"},
+    {"instrument_key": "NSE_EQ|INE155A01022", "symbol": "TATAMOTORS"},
+    {"instrument_key": "NSE_EQ|INE081A01020", "symbol": "TATASTEEL"},
+    {"instrument_key": "NSE_EQ|INE733E01010", "symbol": "NTPC"},
+    {"instrument_key": "NSE_EQ|INE213A01029", "symbol": "ONGC"},
+    {"instrument_key": "NSE_EQ|INE522F01014", "symbol": "COALINDIA"},
+    {"instrument_key": "NSE_EQ|INE752E01010", "symbol": "POWERGRID"},
+    {"instrument_key": "NSE_EQ|INE095A01012", "symbol": "INDUSINDBK"},
+    {"instrument_key": "NSE_EQ|INE158A01026", "symbol": "HEROMOTOCO"},
+    {"instrument_key": "NSE_EQ|INE059A01026", "symbol": "CIPLA"},
+    {"instrument_key": "NSE_EQ|INE089A01031", "symbol": "DRREDDY"},
+    {"instrument_key": "NSE_EQ|INE361B01024", "symbol": "DIVISLAB"},
+    {"instrument_key": "NSE_EQ|INE239A01016", "symbol": "NESTLEIND"},
+    {"instrument_key": "NSE_EQ|INE481G01011", "symbol": "ULTRACEMCO"},
+    {"instrument_key": "NSE_EQ|INE047A01021", "symbol": "GRASIM"},
+    {"instrument_key": "NSE_EQ|INE917I01010", "symbol": "BAJAJ-AUTO"},
+    {"instrument_key": "NSE_EQ|INE795G01014", "symbol": "HDFCLIFE"},
+    {"instrument_key": "NSE_EQ|INE423A01024", "symbol": "ADANIENT"},
+    {"instrument_key": "NSE_EQ|INE742F01042", "symbol": "ADANIPORTS"},
+    {"instrument_key": "NSE_EQ|INE066A01021", "symbol": "EICHERMOT"},
+    {"instrument_key": "NSE_EQ|INE216A01030", "symbol": "BRITANNIA"},
+]
+
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+async def _enrich_with_live(instrument_key: str, intraday_candles: list, swing_candles: list):
+    """
+    Fetch the live quote and append synthetic current candles so indicators
+    reflect the latest price rather than the last completed historical bar.
+
+    Intraday: appends a virtual 5-min candle whose close = LTP.
+    Swing   : replaces / appends today's daily candle using live day-OHLC + LTP.
+    """
+    try:
+        quote_data = await upstox.get_live_quote([instrument_key])
+        # Key in the response matches the instrument_key; fall back to first value if needed
+        inst_data = quote_data.get(instrument_key) or next(iter(quote_data.values()), None)
+        if not inst_data:
+            return intraday_candles, swing_candles
+
+        ltp = inst_data.get("last_price")
+        if not ltp:
+            return intraday_candles, swing_candles
+
+        ltp = float(ltp)
+        ohlc = inst_data.get("ohlc") or {}
+        day_volume = float(inst_data.get("volume") or 0)
+        now_ist = datetime.now().strftime("%Y-%m-%dT%H:%M:%S+05:30")
+        today_date = datetime.now().strftime("%Y-%m-%d")
+
+        # ── Intraday synthetic 5-min candle ──────────────────────────────────
+        if intraday_candles:
+            last_close = float(sorted(intraday_candles, key=lambda c: c[0])[-1][4])
+        else:
+            last_close = ltp
+        intraday_synthetic = [
+            now_ist,
+            last_close,
+            max(ltp, last_close),
+            min(ltp, last_close),
+            ltp,
+            0,   # volume unknown for current incomplete bar
+            0,
+        ]
+        enriched_intraday = intraday_candles + [intraday_synthetic]
+
+        # ── Swing synthetic daily candle ─────────────────────────────────────
+        # Drop any existing partial today candle from the historical pull
+        filtered_swing = [c for c in swing_candles if not str(c[0]).startswith(today_date)]
+        swing_synthetic = [
+            f"{today_date}T00:00:00+05:30",
+            float(ohlc.get("open") or ltp),
+            float(ohlc.get("high") or ltp),
+            float(ohlc.get("low") or ltp),
+            ltp,
+            day_volume,
+            0,
+        ]
+        enriched_swing = filtered_swing + [swing_synthetic]
+
+        return enriched_intraday, enriched_swing
+
+    except Exception:
+        return intraday_candles, swing_candles
+
+
 # ---------------------------------------------------------------------------
 # Analysis
 # ---------------------------------------------------------------------------
@@ -93,6 +208,11 @@ async def analyze(req: AnalyzeRequest):
 
     if not intraday_candles or not swing_candles:
         raise HTTPException(status_code=404, detail="No candle data returned from Upstox")
+
+    # Enrich both candle lists with the current live price before computing indicators
+    intraday_candles, swing_candles = await _enrich_with_live(
+        req.instrument_key, intraday_candles, swing_candles
+    )
 
     intraday_df = candles_to_df(intraday_candles)
     swing_df = candles_to_df(swing_candles)
@@ -121,6 +241,86 @@ async def analyze(req: AnalyzeRequest):
             "signal": swing_signal,
             "candles": df_to_chart_data(swing_df),
         },
+        "timestamp": now.isoformat(),
+    }
+
+
+# ---------------------------------------------------------------------------
+# Market scanner
+# ---------------------------------------------------------------------------
+
+@app.post("/api/market-scan")
+async def market_scan(req: MarketScanRequest):
+    instruments = req.instruments or NIFTY50_WATCHLIST
+    semaphore = asyncio.Semaphore(5)
+    now = datetime.now()
+    intraday_from = _date_str(now - timedelta(days=5))
+    intraday_to = _date_str(now)
+    swing_from = _date_str(now - timedelta(days=180))
+    swing_to = _date_str(now)
+
+    async def analyze_one(inst):
+        async with semaphore:
+            try:
+                intraday_candles = await upstox.get_historical_candles(
+                    inst["instrument_key"], "5minute", intraday_from, intraday_to
+                )
+                swing_candles = await upstox.get_historical_candles(
+                    inst["instrument_key"], "1day", swing_from, swing_to
+                )
+                if not intraday_candles or not swing_candles:
+                    return None
+
+                intraday_df = candles_to_df(intraday_candles)
+                swing_df = candles_to_df(swing_candles)
+
+                intraday_indicators = compute_all_indicators(intraday_df)
+                swing_indicators = compute_all_indicators(swing_df)
+
+                intraday_prediction = predict_intraday(intraday_df)
+                swing_prediction = predict_swing(swing_df)
+
+                intraday_signal = generate_intraday_signal(intraday_indicators, intraday_prediction)
+                swing_signal = generate_swing_signal(swing_indicators, swing_prediction)
+
+                combined_score = intraday_signal.get("score", 0) + swing_signal.get("score", 0)
+
+                return {
+                    "symbol": inst["symbol"],
+                    "instrument_key": inst["instrument_key"],
+                    "combined_score": combined_score,
+                    "intraday": {
+                        "indicators": intraday_indicators,
+                        "prediction": intraday_prediction,
+                        "signal": intraday_signal,
+                    },
+                    "swing": {
+                        "indicators": swing_indicators,
+                        "prediction": swing_prediction,
+                        "signal": swing_signal,
+                    },
+                }
+            except Exception:
+                return None
+
+    results = await asyncio.gather(*[analyze_one(inst) for inst in instruments])
+    valid = [r for r in results if r is not None]
+
+    buy_suggestions = sorted(
+        [r for r in valid if r["swing"]["signal"]["signal"] == "BUY"],
+        key=lambda x: -x["combined_score"],
+    )[: req.max_results]
+
+    sell_suggestions = sorted(
+        [r for r in valid if r["swing"]["signal"]["signal"] == "SELL"],
+        key=lambda x: x["combined_score"],
+    )[: req.max_results]
+
+    return {
+        "buy_suggestions": buy_suggestions,
+        "sell_suggestions": sell_suggestions,
+        "scanned": len(valid),
+        "total": len(instruments),
         "timestamp": now.isoformat(),
     }
 

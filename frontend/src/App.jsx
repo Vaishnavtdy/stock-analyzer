@@ -4,6 +4,7 @@ import CandleChart from "./components/CandleChart";
 import Header from "./components/Header";
 import IndicatorPanel from "./components/IndicatorPanel";
 import LiveTicker from "./components/LiveTicker";
+import MarketScanner from "./components/MarketScanner";
 import PaperTrade from "./components/PaperTrade";
 import SignalPanel from "./components/SignalPanel";
 import SwingPanel from "./components/SwingPanel";
@@ -21,16 +22,17 @@ function App() {
     setError(null);
   };
 
-  const runAnalysis = async () => {
-    if (!instrument) return;
+  const runAnalysis = async (inst) => {
+    const target = inst || instrument;
+    if (!target) return;
 
     setLoading(true);
     setError(null);
 
     try {
       const res = await api.post("/api/analyze", {
-        instrument_key: instrument.instrument_key,
-        symbol: instrument.symbol,
+        instrument_key: target.instrument_key,
+        symbol: target.symbol,
       });
       setAnalysis(res.data);
     } catch (err) {
@@ -40,12 +42,19 @@ function App() {
     }
   };
 
+  const handleLoadFromScanner = (inst) => {
+    setInstrument(inst);
+    setAnalysis(null);
+    setError(null);
+    runAnalysis(inst);
+  };
+
   return (
     <div className="app">
       <Header selectedSymbol={instrument?.symbol} onSelectInstrument={handleSelectInstrument} />
 
       <div className="toolbar">
-        <button className="analyze-btn" onClick={runAnalysis} disabled={!instrument || loading}>
+        <button className="analyze-btn" onClick={() => runAnalysis()} disabled={!instrument || loading}>
           {loading ? "Analyzing..." : "Run Analysis"}
         </button>
         {error && <span className="error-text">{error}</span>}
@@ -74,6 +83,10 @@ function App() {
           />
           <IndicatorPanel title="Swing Indicators" indicators={analysis?.swing?.indicators} />
         </div>
+      </div>
+
+      <div className="scanner-wrapper">
+        <MarketScanner onLoadInstrument={handleLoadFromScanner} />
       </div>
     </div>
   );
