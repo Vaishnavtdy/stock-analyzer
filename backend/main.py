@@ -13,7 +13,8 @@ import paper_trade
 import upstox
 from auth import router as auth_router
 from indicators import candles_to_df, compute_all_indicators, df_to_chart_data
-from ml_model import predict_intraday, predict_swing, train_intraday_model, train_swing_model
+from ml_model import (get_features_snapshot, predict_intraday, predict_swing,
+                       retrain_with_feedback, train_intraday_model, train_swing_model)
 from signals import generate_intraday_signal, generate_swing_signal
 
 app = FastAPI(title="MarketPulse Pro API")
@@ -59,6 +60,8 @@ class PaperTradeRequest(BaseModel):
     target: float
     stop_loss: float
     type: str
+    instrument_key: str = None
+    features_snapshot: dict = None
 
 
 class ExitTradeRequest(BaseModel):
@@ -234,12 +237,14 @@ async def analyze(req: AnalyzeRequest):
             "prediction": intraday_prediction,
             "signal": intraday_signal,
             "candles": df_to_chart_data(intraday_df),
+            "features_snapshot": get_features_snapshot(intraday_df),
         },
         "swing": {
             "indicators": swing_indicators,
             "prediction": swing_prediction,
             "signal": swing_signal,
             "candles": df_to_chart_data(swing_df),
+            "features_snapshot": get_features_snapshot(swing_df),
         },
         "timestamp": now.isoformat(),
     }
@@ -369,6 +374,8 @@ def create_paper_trade(req: PaperTradeRequest):
         target=req.target,
         stop_loss=req.stop_loss,
         trade_type=req.type,
+        instrument_key=req.instrument_key,
+        features_snapshot=req.features_snapshot,
     )
     return trade
 
@@ -380,6 +387,53 @@ def exit_paper_trade(trade_id: str, req: ExitTradeRequest):
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc))
     return trade
+
+
+# ---------------------------------------------------------------------------
+# Feedback stats & retraining
+# ---------------------------------------------------------------------------
+
+@app.get("/api/feedback-stats")
+def feedback_stats():
+    return paper_trade.get_feedback_stats()
+
+
+class FeedbackRetrainRequest(BaseModel):
+    instrument_key: str = None
+    symbol: str = None
+
+
+@app.post("/api/train-feedback")
+async def train_feedback(req: FeedbackRetrainRequest):
+    samples = paper_trade.get_feedback_samples()
+    if not samples:
+        raise HTTPException(status_code=400, detail="No resolved feedback samples yet. Close some paper trades first.")
+
+    stats = paper_trade.get_feedback_stats()
+    if not stats["ready_to_retrain"]:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Need at least 10 resolved trades to retrain. Have {stats['total']} so far.",
+        )
+
+    # Optionally blend with current stock's candle history
+    base_df = None
+    if req.instrument_key:
+        try:
+            now = datetime.now()
+            candles = await upstox.get_historical_candles(
+                req.instrument_key, "1day",
+                _date_str(now - timedelta(days=180)),
+                _date_str(now),
+            )
+            if candles:
+                from indicators import candles_to_df
+                base_df = candles_to_df(candles)
+        except Exception:
+            pass
+
+    results = retrain_with_feedback(samples, base_df)
+    return {"results": results, "feedback_used": len(samples)}
 
 
 # ---------------------------------------------------------------------------

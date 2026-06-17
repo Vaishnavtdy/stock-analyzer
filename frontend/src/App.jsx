@@ -74,12 +74,16 @@ function App() {
             symbol={instrument?.symbol}
             signal={analysis?.intraday?.signal}
             prediction={analysis?.intraday?.prediction}
+            featuresSnapshot={analysis?.intraday?.features_snapshot}
+            instrumentKey={instrument?.instrument_key}
           />
           <IndicatorPanel title="Intraday Indicators" indicators={analysis?.intraday?.indicators} />
           <SwingPanel
             symbol={instrument?.symbol}
             signal={analysis?.swing?.signal}
             prediction={analysis?.swing?.prediction}
+            featuresSnapshot={analysis?.swing?.features_snapshot}
+            instrumentKey={instrument?.instrument_key}
           />
           <IndicatorPanel title="Swing Indicators" indicators={analysis?.swing?.indicators} />
         </div>

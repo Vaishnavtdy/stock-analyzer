@@ -1,7 +1,7 @@
 import { useState } from "react";
 import api from "../api";
 
-function SignalPanel({ symbol, signal, prediction }) {
+function SignalPanel({ symbol, signal, prediction, featuresSnapshot, instrumentKey }) {
   const [adding, setAdding] = useState(false);
   const [added, setAdded] = useState(false);
 
@@ -19,6 +19,8 @@ function SignalPanel({ symbol, signal, prediction }) {
         target: signal.target,
         stop_loss: signal.stop_loss,
         type: "INTRADAY",
+        instrument_key: instrumentKey,
+        features_snapshot: featuresSnapshot,
       });
       setAdded(true);
       setTimeout(() => setAdded(false), 2000);
