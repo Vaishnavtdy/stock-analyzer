@@ -59,7 +59,9 @@ function SignalPanel({ symbol, signal, prediction, featuresSnapshot, instrumentK
         <div>
           <span className="label">ML Confidence</span>
           <span className="value">
-            {prediction ? `${prediction.direction} (${(signal.ml_confidence * 100).toFixed(1)}%)` : "--"}
+            {prediction
+              ? `${prediction.direction} ${(prediction.prob_up * 100).toFixed(1)}% (${prediction.confidence})`
+              : "--"}
           </span>
         </div>
       </div>

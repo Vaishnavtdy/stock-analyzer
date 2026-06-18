@@ -694,10 +694,20 @@ body {
 }
 
 .scanner-loading {
-  color: #9aa4b2;
-  font-size: 0.85rem;
   padding: 1rem 0;
   text-align: center;
+}
+
+.scanner-phase {
+  color: #4ade80;
+  font-size: 0.85rem;
+  font-weight: 600;
+  margin-bottom: 0.3rem;
+}
+
+.scanner-hint {
+  color: #6b7280;
+  font-size: 0.78rem;
 }
 
 .scanner-placeholder {
@@ -736,6 +746,110 @@ body {
 .scanner-empty {
   color: #6b7280;
   font-size: 0.85rem;
+}
+
+/* ── Scanner AI Report ── */
+.ai-report-panel {
+  background: linear-gradient(135deg, #0d1117 0%, #11141b 100%);
+  border: 1px solid #a78bfa44;
+  border-radius: 8px;
+  padding: 0.85rem 1rem;
+  margin-bottom: 1rem;
+}
+
+.ai-report-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.65rem;
+}
+
+.ai-report-icon {
+  color: #a78bfa;
+  font-size: 0.9rem;
+}
+
+.ai-report-title {
+  font-size: 0.8rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #a78bfa;
+}
+
+.ai-report-loading {
+  font-size: 0.75rem;
+  color: #6b7280;
+  margin-left: auto;
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.4; }
+}
+
+.ai-report-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.ai-report-line {
+  margin: 0;
+  font-size: 0.85rem;
+  line-height: 1.55;
+  color: #c2c8d3;
+}
+
+.ai-report-symbol {
+  color: #e6e9ef;
+  font-weight: 700;
+}
+
+/* Top movers strip */
+.movers-strip {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem;
+  margin-bottom: 0.9rem;
+  padding: 0.5rem 0.6rem;
+  background: #0d1117;
+  border-radius: 6px;
+  border: 1px solid #1e222d;
+}
+
+.movers-label {
+  font-size: 0.7rem;
+  color: #6b7280;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-right: 0.25rem;
+}
+
+.mover-chip {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #e6e9ef;
+  background: #161922;
+  border: 1px solid #2a2f3a;
+  border-radius: 4px;
+  padding: 0.15rem 0.45rem;
+}
+
+.mover-pct {
+  color: #4ade80;
+  margin-left: 0.2rem;
+}
+
+/* Today's move row inside suggestion card */
+.suggestion-change {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.78rem;
+  padding: 0.15rem 0;
 }
 
 .suggestions-grid {
